@@ -22,4 +22,4 @@ String pomContent = FileUtils.readFileToString(file);
 
 if (!pomContent.
         contains("<groupId>junit</groupId>") || !pomContent.contains("<artifactId>xdt4j</artifactId>"))
-    throw new RuntimeException("The generated projet do not containe all data needed");
+    throw new RuntimeException("The generated project do not containe all data needed");
