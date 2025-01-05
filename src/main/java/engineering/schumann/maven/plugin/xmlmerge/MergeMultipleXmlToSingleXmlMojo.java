@@ -18,21 +18,30 @@ package engineering.schumann.maven.plugin.xmlmerge;
 
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.AndFileFilter;
+import org.apache.commons.io.filefilter.DirectoryFileFilter;
+import org.apache.commons.io.filefilter.IOFileFilter;
+import org.apache.commons.io.filefilter.NotFileFilter;
+import org.apache.commons.io.filefilter.OrFileFilter;
+import org.apache.commons.io.filefilter.RegexFileFilter;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.dom4j.Document;
+import org.dom4j.io.OutputFormat;
+import org.dom4j.io.XMLWriter;
 
-import be.hikage.maven.plugin.xmlmerge.utils.Dom4JUtils;
+import be.hikage.maven.plugin.xmlmerge.XdtMerger;
 
 
 /**
  * Goal which merge multiple XML files into one
  *
- * @goal mergeAllToOne
+ * @goal mergeAllIntoOne
  * @phase prepare-package
  */
 public class MergeMultipleXmlToSingleXmlMojo
@@ -60,6 +69,41 @@ public class MergeMultipleXmlToSingleXmlMojo
 	 */
 	protected boolean failIfNoneFound;
 
+	/**
+	 * 
+	 * @parameter default-value="simple"
+	 * @required
+	 */
+	protected String  mergeMode;
+
+	/**
+	 * A set of file patterns to exclude from the zip.
+	 * 
+	 * @parameter alias="excludes"
+	 */
+	private String[]  mExcludes;
+
+	/**
+	 * 
+	 * @parameter
+	 */
+	protected String  outputFileName;
+
+
+	/*
+	 * ====================
+	 * 
+	 * GETTER & SETTER
+	 * 
+	 * ====================
+	 */
+	public void setExcludes(
+		String[] excludes
+	)
+	{
+		mExcludes = excludes;
+	}
+
 
 	/*
 	 * ====================
@@ -86,6 +130,10 @@ public class MergeMultipleXmlToSingleXmlMojo
 				"Search file matching:          %s"
 					.formatted(mergeFilenamePattern)
 			);
+		// select merger
+		selectXmlMerger();
+		// @INFO
+		getLog().info("Merge mode:                    %s".formatted(mergeMode));
 
 		/*
 		 * search files
@@ -152,15 +200,15 @@ public class MergeMultipleXmlToSingleXmlMojo
 				// .. ?
 				var baseFileName = EnsureFileExtension(fileGroup, ".xml");
 				// ... file itself
-				var baseFile = getBaseFile(fileToMerge, baseFileName);
+				var baseFile     = getBaseFile(fileToMerge, baseFileName);
 				if (baseFile.exists())
 					getLog()
 						.info(
-							"Base file found:               %s"
+							"... Base file found:           %s"
 								.formatted(baseFile.getAbsolutePath())
 						);
 				else
-					getLog().info("Base file NOT FOUND.");
+					getLog().info("... Base file NOT FOUND.");
 
 				/*
 				 * determine output file
@@ -168,23 +216,35 @@ public class MergeMultipleXmlToSingleXmlMojo
 				// ... use file group
 				var  outputFileName = EnsureFileExtension(fileGroup, ".xml");
 				// ... file itself
-				File outputFile     = getOutputFile(fileToMerge, outputFileName);
+				File outputFile     = new File(outputDirectory, outputFileName);
+				getLog()
+					.info(
+						"... Output file:               %s"
+							.formatted(outputFile.getAbsolutePath())
+					);
+
 				// delete existing file, if needed
 				if (cleanOutputFile && !fileGroups.contains(fileGroup)
 					&& outputFile.exists())
+				{
 					outputFile.delete();
+
+					getLog()
+						.warn(
+							"... DELETED:                   %s"
+								.formatted(outputFile.getAbsolutePath())
+						);
+				}
 				// copy base file if one exists
-				if (baseFile.exists())
+				if (baseFile.exists() && !fileGroups.contains(fileGroup))
+				{
 					FileUtils.copyFile(baseFile, outputFile);
+
+					getLog().info("... copied Base file to Output file");
+				}
 
 				// add group to list of discovered groups
 				fileGroups.add(fileGroup);
-
-				getLog()
-					.info(
-						"Output file:                   %s"
-							.formatted(baseFile.getAbsolutePath())
-					);
 
 				/*
 				 * MERGE FILE - nothing to merge
@@ -207,15 +267,7 @@ public class MergeMultipleXmlToSingleXmlMojo
 				 * 
 				 * an output file already exists. now we have to merge.
 				 */
-				var prologHeader = processProlog ? new StringBuilder() : null;
-				// read the (existing) output file
-				var documentBase = Dom4JUtils
-					.readDocument(outputFile.toURI().toURL(), prologHeader);
-				// merge with current file in loop
-				var result       = xmlMerger
-					.mergeXml(documentBase, loadXml(fileToMerge));
-				// write it back to output file
-				writeMergedXml(outputFile, result, prologHeader);
+				mergeXml(outputFile, fileToMerge, outputFile);
 			}
 		}
 		catch (Exception e)
@@ -265,6 +317,54 @@ public class MergeMultipleXmlToSingleXmlMojo
 
 
 	/**
+	 * Override strategy by allowing to exclude folders, e.g. /target.
+	 * 
+	 * @param fileToMerge
+	 * @param baseFileName
+	 */
+	@Override
+	protected void findXmlToMerge(
+		File fileToProcess,
+		List<File> xmlFiles
+	)
+	{
+
+		// what we are looking for
+		var fileFilter = new AndFileFilter(
+			new RegexFileFilter(mergeFilenamePattern)
+		);
+		// what we want to exclude
+		if (mExcludes != null && mExcludes.length > 0)
+		{
+			var excludeFilters = new ArrayList<IOFileFilter>();
+
+			for (var exclude : mExcludes)
+				excludeFilters.add(new RegexFileFilter(exclude));
+
+			fileFilter
+				.addFileFilter(
+					new NotFileFilter(new OrFileFilter(excludeFilters))
+				);
+		}
+		else
+			getLog()
+				.warn(
+					"'inputDirectoryExclude' is EMPTY. Consider excluding '/target'"
+				);
+
+		var filesFound = FileUtils
+			.listFiles(
+				fileToProcess,
+				fileFilter,
+				DirectoryFileFilter.DIRECTORY
+			);
+
+		xmlFiles.addAll(filesFound);
+
+	}
+
+
+	/**
 	 * 
 	 * @param input
 	 * @param extension
@@ -283,4 +383,58 @@ public class MergeMultipleXmlToSingleXmlMojo
 		return "%s%s".formatted(input, extension);
 	}
 
+
+	private void mergeXml(
+		File inputFile,
+		File fileToMerge,
+		File outputFile
+	) throws Exception
+	{
+		getLog().warn("HERE 1");
+		
+		// merge document
+		var resultDocument = xmlMerger
+			.mergeXml(loadXml(inputFile), loadXml(fileToMerge));
+		
+		// write it back to output file
+		var format = OutputFormat.createPrettyPrint();
+		format.setSuppressDeclaration(false);
+		format.setNewLineAfterDeclaration(true);
+		
+		var fos = new FileOutputStream(outputFile);
+		var writer = new XMLWriter(fos, format);
+		writer.write(resultDocument);
+		writer.flush();
+		writer.close();
+	}
+
+
+	private void selectXmlMerger() throws MojoExecutionException
+	{
+		try
+		{
+			switch (mergeMode.toLowerCase().trim())
+			{
+				case "simple":
+					xmlMerger = new SimpleMerger();
+					break;
+
+				case "xdt":
+					xmlMerger = new XdtMerger();
+					break;
+
+				default:
+					throw new MojoExecutionException(
+						"Merge mode '%s' unknown".formatted(mergeMode)
+					);
+			}
+		}
+		catch (Exception ex)
+		{
+			throw new MojoExecutionException(
+				"Something went wrong while merging XML",
+				ex
+			);
+		}
+	}
 }
