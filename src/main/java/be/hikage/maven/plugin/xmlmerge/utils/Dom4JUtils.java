@@ -9,30 +9,55 @@ import org.dom4j.io.SAXReader;
 import java.io.*;
 import java.net.URL;
 
-public abstract class Dom4JUtils {
 
-    public static Document readDocument(URL file, StringBuilder prologBuffer) throws DocumentException, IOException {
-        try {
+public abstract class Dom4JUtils
+{
 
-            SAXReader reader = new SAXReader();
-            return reader.read(file.openStream());
-        } catch (DocumentException e) {
-            if (e.getMessage().contains("Content is not allowed in prolog") && prologBuffer != null) {
+	public static Document readDocument(
+		URL file,
+		StringBuilder prologBuffer
+	) throws DocumentException, IOException
+	{
+		try
+		{
 
-                String xmlText = IOUtils.toString(file.openStream());
-                int firstXmlCharIndex = xmlText.indexOf("<");
-                if (firstXmlCharIndex == -1) throw e;
-                prologBuffer.append(xmlText.substring(0, firstXmlCharIndex-1));
-                SAXReader reader = new SAXReader();
-                return reader.read(new StringReader(xmlText.substring(firstXmlCharIndex)));
-            }
-            else
-                throw e;
-        }
+			SAXReader reader = new SAXReader();
+			return reader.read(file.openStream());
+		}
+		catch (DocumentException e)
+		{
+			// FIXME this is bad
+			if (e.getMessage().contains("Content is not allowed in prolog")
+				&& prologBuffer != null)
+			{
 
-    }
+				String xmlText           = IOUtils.toString(file.openStream());
+				// FIXME this doesn't work: < might be part of the prolog. Look
+				// for first line starting with < instead
+				int    firstXmlCharIndex = xmlText.indexOf("<");
+				if (firstXmlCharIndex == -1)
+					throw e;
+				
+				prologBuffer
+					.append(xmlText.substring(0, firstXmlCharIndex - 1).trim());
+				
+				SAXReader reader = new SAXReader();
+				return reader
+					.read(
+						new StringReader(xmlText.substring(firstXmlCharIndex))
+					);
+			}
+			else
+				throw e;
+		}
 
-    public static Document readDocument(URL stream) throws DocumentException, IOException {
-        return readDocument(stream, null);
-    }
+	}
+
+
+	public static Document readDocument(
+		URL stream
+	) throws DocumentException, IOException
+	{
+		return readDocument(stream, null);
+	}
 }
