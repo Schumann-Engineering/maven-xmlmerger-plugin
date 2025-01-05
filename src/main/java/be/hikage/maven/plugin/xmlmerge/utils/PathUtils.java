@@ -28,8 +28,8 @@ public class PathUtils {
         String normalizedTargetPath = FilenameUtils.normalizeNoEndSeparator(children.getAbsolutePath());
         String normalizedBasePath = FilenameUtils.normalizeNoEndSeparator(base.getAbsolutePath());
 
-        System.out.println(normalizedTargetPath);
-        System.out.println(normalizedBasePath);
+        //System.out.println(normalizedTargetPath);
+        //System.out.println(normalizedBasePath);
 
 
         return normalizedTargetPath.substring(normalizedBasePath.length());
