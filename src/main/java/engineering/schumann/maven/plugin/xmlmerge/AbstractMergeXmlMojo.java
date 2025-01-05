@@ -96,6 +96,14 @@ public abstract class AbstractMergeXmlMojo
 	protected Boolean   processProlog;
 
 	/**
+	 * Flag to instruct the XML processor to ignore comments
+	 *
+	 * @parameter default-value="false"
+	 * @required
+	 */
+	protected Boolean   ignoreComments;
+
+	/**
 	 * The mergeFilenamePattern used to find XML Document to merge. It have to
 	 * return two groups, including the second is the name of the file in which
 	 * it must be merged. The default pattern assume that the XML Document to be
@@ -165,7 +173,10 @@ public abstract class AbstractMergeXmlMojo
 		File baseFile
 	) throws DocumentException
 	{
-		SAXReader reader = new SAXReader();
+		SAXReader reader = new SAXReader();		
+		
+		reader.setIgnoreComments(ignoreComments);
+		
 		return reader.read(baseFile);
 	}
 
