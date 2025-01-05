@@ -4,16 +4,16 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>be.hikage</groupId>
+    <groupId>schumann-engineering.maven-plugins</groupId>
     <artifactId>maven-xmlmerger-plugin-specificpattern</artifactId>
-    <version>1.0.1-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
 
 
     <build>
         <plugins>
             <plugin>
-                <groupId>be.hikage.maven.plugins</groupId>
+                <groupId>schumann-engineering.maven-plugins</groupId>
                 <artifactId>maven-xmlmerger-plugin</artifactId>
                 <version>@project.version@</version>
                 <executions>
