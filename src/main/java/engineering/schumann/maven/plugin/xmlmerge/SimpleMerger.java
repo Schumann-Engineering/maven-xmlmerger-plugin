@@ -53,16 +53,6 @@ public class SimpleMerger
 			// and not List<Element>?
 			var sourceElement = (Node) sourceElementObj;
 
-			// @INFO
-			LOG
-				.info(
-					"merging node of type '%s': '%s'"
-						.formatted(
-							sourceElement.toString(),
-							sourceElement.getNodeTypeName()
-						)
-				);
-
 			// change parent
 			targetRoot.add(sourceElement.detach());
 		}
