@@ -31,6 +31,8 @@ import org.apache.commons.io.filefilter.IOFileFilter;
 import org.apache.commons.io.filefilter.NotFileFilter;
 import org.apache.commons.io.filefilter.OrFileFilter;
 import org.apache.commons.io.filefilter.RegexFileFilter;
+import org.apache.commons.io.filefilter.RegexPathFilter;
+import org.apache.commons.io.filefilter.RegexPathFilter.FilterMode;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.dom4j.io.OutputFormat;
 import org.dom4j.io.XMLWriter;
@@ -77,7 +79,7 @@ public class MergeMultipleXmlToSingleXmlMojo
 	protected String  mergeMode;
 
 	/**
-	 * A set of file patterns to exclude from the zip.
+	 * A set of file and/or path patterns to exclude
 	 * 
 	 * @parameter alias="excludes"
 	 */
@@ -324,27 +326,29 @@ public class MergeMultipleXmlToSingleXmlMojo
 	 */
 	@Override
 	protected void findXmlToMerge(
-		File fileToProcess,
+		File searchDirectory,
 		List<File> xmlFiles
 	)
 	{
+		// this will become AND( ... )
+		var fileFilters = new ArrayList<IOFileFilter>();
+		// this will become NOT( OR ( ... )
+		var dirFilters  = new ArrayList<IOFileFilter>();
 
-		// what we are looking for
-		var fileFilter = new AndFileFilter(
-			new RegexFileFilter(mergeFilenamePattern)
-		);
-		// what we want to exclude
+		// === ADD SEARCH PATTERN ===
+		fileFilters.add(new RegexFileFilter(mergeFilenamePattern));
+		dirFilters.add(DirectoryFileFilter.DIRECTORY);
+
+		// === ADD EXCLUDES ===
+		// NOTE: this adds NOT(OR( ... ))
 		if (mExcludes != null && mExcludes.length > 0)
 		{
-			var excludeFilters = new ArrayList<IOFileFilter>();
-
 			for (var exclude : mExcludes)
-				excludeFilters.add(new RegexFileFilter(exclude));
-
-			fileFilter
-				.addFileFilter(
-					new NotFileFilter(new OrFileFilter(excludeFilters))
-				);
+			{
+				fileFilters
+					.add(new NotFileFilter(new RegexFileFilter(exclude)));
+				dirFilters.add(new RegexPathFilter(exclude, FilterMode.REJECT));
+			}
 		}
 		else
 			getLog()
@@ -352,15 +356,16 @@ public class MergeMultipleXmlToSingleXmlMojo
 					"'inputDirectoryExclude' is EMPTY. Consider excluding '/target'"
 				);
 
+		// === PUT IT ALL TOGETHER
+		var fileFilter = new AndFileFilter(fileFilters);
+		var dirFilter  = new AndFileFilter(dirFilters);
+
+		// === SEARCH ===
 		var filesFound = FileUtils
-			.listFiles(
-				fileToProcess,
-				fileFilter,
-				DirectoryFileFilter.DIRECTORY
-			);
+			.listFiles(searchDirectory, fileFilter, dirFilter);
 
+		// === RESULT ===
 		xmlFiles.addAll(filesFound);
-
 	}
 
 
@@ -390,18 +395,16 @@ public class MergeMultipleXmlToSingleXmlMojo
 		File outputFile
 	) throws Exception
 	{
-		getLog().warn("HERE 1");
-		
 		// merge document
 		var resultDocument = xmlMerger
 			.mergeXml(loadXml(inputFile), loadXml(fileToMerge));
-		
+
 		// write it back to output file
-		var format = OutputFormat.createPrettyPrint();
+		var format         = OutputFormat.createPrettyPrint();
 		format.setSuppressDeclaration(false);
 		format.setNewLineAfterDeclaration(true);
-		
-		var fos = new FileOutputStream(outputFile);
+
+		var fos    = new FileOutputStream(outputFile);
 		var writer = new XMLWriter(fos, format);
 		writer.write(resultDocument);
 		writer.flush();
